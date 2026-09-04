@@ -1,5 +1,6 @@
 from datetime import datetime
 import streamlit as st
+from sqlalchemy.orm import joinedload, selectinload
 
 from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import log_action
@@ -13,19 +14,30 @@ FLAGS = ["Normal", "High", "Low", "Critical", "Positive", "Negative", "Abnormal"
 
 st.title("📝 Result Entry")
 
-pending_samples = db.query(Sample).filter(
-    Sample.tenant_id == tid, Sample.status.in_(["Collected", "Received", "Processing"])
-).order_by(Sample.id.desc()).all()
+pending_samples = (
+    db.query(Sample)
+    .options(joinedload(Sample.patient), selectinload(Sample.orders).joinedload(TestOrder.test))
+    .filter(Sample.tenant_id == tid, Sample.status.in_(["Collected", "Received", "Processing"]))
+    .order_by(Sample.id.desc()).all()
+)
 
 if not pending_samples:
     st.info("No samples pending result entry.")
 
+# Batch-fetch any already-entered results for every pending order in one
+# query instead of one query per order (was an N+1 pattern).
+all_order_ids = [o.id for s in pending_samples for o in s.orders]
+existing_by_order = {}
+if all_order_ids:
+    for r in db.query(TestResult).filter(TestResult.tenant_id == tid, TestResult.test_order_id.in_(all_order_ids)).all():
+        existing_by_order[r.test_order_id] = r
+
 for s in pending_samples:
-    orders = db.query(TestOrder).filter_by(tenant_id=tid, sample_id=s.id).all()
+    orders = s.orders
     with st.expander(f"{s.sample_number} — {s.patient.name} ({', '.join(o.test.name for o in orders)})"):
         for order in orders:
             st.markdown(f"**{order.test.name}**")
-            existing = db.query(TestResult).filter_by(tenant_id=tid, test_order_id=order.id).first()
+            existing = existing_by_order.get(order.id)
             col1, col2, col3, col4 = st.columns(4)
             param = col1.text_input("Parameter", value=existing.parameter if existing else order.test.name, key=f"param_{order.id}")
             result = col2.text_input("Result", value=existing.result if existing else "", key=f"result_{order.id}")

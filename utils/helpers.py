@@ -1,6 +1,8 @@
 import random
 from datetime import date, datetime
 
+from sqlalchemy import func
+
 from db.models import Patient, Sample, Bill, AuditLog, Setting
 
 DEMO_FIRST_NAMES = [
@@ -14,10 +16,13 @@ DEMO_LAST_NAMES = [
 DEMO_AREAS = ["MG Road", "Park Street", "Sector 21", "Civil Lines", "Anna Nagar", "Banjara Hills", "Koramangala"]
 
 
-def add_demo_patients(session, tenant_id, count=20):
+def add_demo_patients(session, tenant_id, count=20, doctor_ids=None):
     """Seeds `count` fake patients for the given tenant, for trying out
     the app without typing in real data by hand. Idempotent-safe to
-    call repeatedly — each call just adds `count` more."""
+    call repeatedly — each call just adds `count` more. Pass
+    `doctor_ids` to randomly assign each new patient a referring
+    doctor (so the Doctors page and Doctor-wise Report have real
+    numbers to show)."""
     created = []
     for _ in range(count):
         name = f"{random.choice(DEMO_FIRST_NAMES)} {random.choice(DEMO_LAST_NAMES)}"
@@ -31,6 +36,7 @@ def add_demo_patients(session, tenant_id, count=20):
             mobile=f"9{random.randint(100000000, 999999999)}",
             address=f"{random.choice(DEMO_AREAS)}",
             email="",
+            referring_doctor_id=random.choice(doctor_ids) if doctor_ids else None,
             patient_type=random.choice(["New", "Existing"]),
             registration_date=date.today(),
             notes="Demo patient (seeded for testing)",
@@ -40,6 +46,26 @@ def add_demo_patients(session, tenant_id, count=20):
         created.append(p)
     session.commit()
     return created
+
+
+def doctor_stats(session, tenant_id):
+    """Returns {doctor_id: {"patients": int, "revenue": float}} for
+    every doctor in one pair of grouped queries, instead of two
+    queries per doctor (used by the Doctors page and the Doctor-wise
+    Report, both of which used to query per-row in a loop)."""
+    counts = dict(
+        session.query(Patient.referring_doctor_id, func.count(Patient.id))
+        .filter(Patient.tenant_id == tenant_id, Patient.referring_doctor_id.isnot(None))
+        .group_by(Patient.referring_doctor_id).all()
+    )
+    revenues = dict(
+        session.query(Patient.referring_doctor_id, func.sum(Bill.net_amount))
+        .join(Bill, Bill.patient_id == Patient.id)
+        .filter(Patient.tenant_id == tenant_id, Bill.status == "Active", Patient.referring_doctor_id.isnot(None))
+        .group_by(Patient.referring_doctor_id).all()
+    )
+    doctor_ids = set(counts) | set(revenues)
+    return {did: {"patients": counts.get(did, 0), "revenue": revenues.get(did, 0) or 0} for did in doctor_ids}
 
 
 def next_patient_code(session, tenant_id):

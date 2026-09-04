@@ -85,7 +85,17 @@ with tab_profiles:
 
     st.markdown("##### Existing Packages")
     profiles = db.query(TestProfile).filter_by(tenant_id=tid).all()
-    for p in profiles:
-        items = db.query(TestProfileItem).filter_by(profile_id=p.id).all()
-        names = [db.query(TestItem).get(i.test_id).name for i in items]
-        st.write(f"**{p.name}** — ₹{p.price:.0f} — {', '.join(names)}")
+    if profiles:
+        # Batch-fetch every package's tests in two queries total instead
+        # of two queries per package (was an N+1 pattern).
+        profile_ids = [p.id for p in profiles]
+        all_items = db.query(TestProfileItem).filter(TestProfileItem.profile_id.in_(profile_ids)).all()
+        test_ids = {i.test_id for i in all_items}
+        test_names_by_id = {t.id: t.name for t in db.query(TestItem).filter(TestItem.id.in_(test_ids)).all()} if test_ids else {}
+        test_ids_by_profile = {}
+        for i in all_items:
+            test_ids_by_profile.setdefault(i.profile_id, []).append(i.test_id)
+
+        for p in profiles:
+            names = [test_names_by_id[t] for t in test_ids_by_profile.get(p.id, []) if t in test_names_by_id]
+            st.write(f"**{p.name}** — ₹{p.price:.0f} — {', '.join(names)}")

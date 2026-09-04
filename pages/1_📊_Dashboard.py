@@ -3,8 +3,7 @@ import streamlit as st
 from sqlalchemy import func
 
 from utils.session import get_db, require_login, current_tenant_id, current_role
-from utils.helpers import add_demo_patients
-from db.seed_demo import reset_demo_data, DEMO_LAB_CODE
+from db.seed_demo import seed_full_demo_data, reset_demo_data, DEMO_LAB_CODE
 from db.models import Patient, Sample, Report, Bill, Doctor, TestItem, Staff, TestOrder, Tenant
 
 require_login()
@@ -18,17 +17,19 @@ if current_role() == "admin" and _tenant.lab_code == DEMO_LAB_CODE:
     with st.container(border=True):
         st.markdown("**🧪 Demo Data Controls**")
         st.caption(
-            "This is the public demo lab — anything entered here resets automatically "
-            "within 60 minutes. Use these to add or clear sample data on demand."
+            "This is the public demo lab — anything entered here resets automatically within "
+            "60 minutes. Add loads a full demo dataset (patients, doctors, tests, samples, "
+            "results, bills, staff, inventory, expenses); Remove clears everything back to that "
+            "same baseline."
         )
         col_add, col_remove = st.columns(2)
         if col_add.button("➕ Add Demo Data", use_container_width=True):
-            add_demo_patients(db, tid, count=20)
-            st.success("20 demo patients added.")
+            seed_full_demo_data(db, tid, patient_count=20)
+            st.success("Demo data added across every module.")
             st.rerun()
         if col_remove.button("🗑️ Remove Demo Data", use_container_width=True):
             reset_demo_data(db, tid)
-            st.success("Demo data cleared and reset to the 20-patient baseline.")
+            st.success("Demo data cleared and reset to the baseline.")
             st.rerun()
 
 today = date.today()

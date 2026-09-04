@@ -1,10 +1,11 @@
 from datetime import datetime
 import streamlit as st
+from sqlalchemy.orm import joinedload, selectinload
 
 from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import log_action
 from utils.pdf_report import generate_report_pdf_bytes
-from db.models import Sample, Report, Pathologist
+from db.models import Sample, Report, Pathologist, TestOrder
 
 require_login()
 db = get_db()
@@ -12,7 +13,17 @@ tid = current_tenant_id()
 
 st.title("✅ Report Verification")
 
-completed_samples = db.query(Sample).filter(Sample.tenant_id == tid, Sample.status == "Completed").order_by(Sample.id.desc()).all()
+completed_samples = (
+    db.query(Sample)
+    .options(
+        joinedload(Sample.patient),
+        joinedload(Sample.report),
+        selectinload(Sample.orders).joinedload(TestOrder.test),
+        selectinload(Sample.orders).selectinload(TestOrder.results),
+    )
+    .filter(Sample.tenant_id == tid, Sample.status == "Completed")
+    .order_by(Sample.id.desc()).all()
+)
 pending = [s for s in completed_samples if s.report and s.report.status != "Locked"]
 locked = [s for s in completed_samples if s.report and s.report.status == "Locked"]
 
@@ -60,7 +71,16 @@ with tab_locked:
         st.info("No verified reports yet.")
     for s in locked:
         with st.expander(f"{s.sample_number} — {s.patient.name} (Verified)"):
-            pdf_bytes = generate_report_pdf_bytes(db, tid, s)
-            st.download_button("⬇️ Download PDF Report", data=pdf_bytes,
-                                file_name=f"{s.sample_number}_report.pdf", mime="application/pdf",
-                                key=f"dl_{s.id}")
+            # PDF generation is real work (reportlab layout) -- only do it
+            # when this specific report is asked for, and cache the bytes
+            # for the rest of the session so re-rendering this page doesn't
+            # regenerate every locked report's PDF on every rerun.
+            cache_key = f"pdf_bytes_{s.id}"
+            if cache_key not in st.session_state:
+                if st.button("📄 Prepare PDF", key=f"prep_{s.id}"):
+                    st.session_state[cache_key] = generate_report_pdf_bytes(db, tid, s)
+                    st.rerun()
+            else:
+                st.download_button("⬇️ Download PDF Report", data=st.session_state[cache_key],
+                                    file_name=f"{s.sample_number}_report.pdf", mime="application/pdf",
+                                    key=f"dl_{s.id}")

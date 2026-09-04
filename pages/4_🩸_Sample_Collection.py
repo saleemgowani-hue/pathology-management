@@ -1,5 +1,6 @@
 from datetime import datetime
 import streamlit as st
+from sqlalchemy.orm import joinedload, selectinload
 
 from utils.session import get_db, require_login, current_tenant_id, current_full_name
 from utils.helpers import next_sample_number, log_action
@@ -50,7 +51,8 @@ with tab_new:
 
 with tab_list:
     status_filter = st.selectbox("Filter by status", ["All"] + STATUSES)
-    query = db.query(Sample).filter_by(tenant_id=tid)
+    query = db.query(Sample).options(joinedload(Sample.patient), selectinload(Sample.orders).joinedload(TestOrder.test)) \
+        .filter_by(tenant_id=tid)
     if status_filter != "All":
         query = query.filter_by(status=status_filter)
     samples = query.order_by(Sample.id.desc()).limit(200).all()
@@ -58,8 +60,7 @@ with tab_list:
     if not samples:
         st.info("No samples found.")
     for s in samples:
-        orders = db.query(TestOrder).filter_by(tenant_id=tid, sample_id=s.id).all()
-        test_names = ", ".join(o.test.name for o in orders)
+        test_names = ", ".join(o.test.name for o in s.orders)
         with st.expander(f"{s.sample_number} — {s.patient.name} — {s.status}"):
             st.write(f"**Tests:** {test_names}")
             st.write(f"**Collected:** {s.collection_datetime.strftime('%d-%b-%Y %H:%M')} by {s.collected_by}")

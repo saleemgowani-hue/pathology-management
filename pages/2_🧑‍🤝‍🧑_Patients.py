@@ -1,5 +1,6 @@
 from datetime import date
 import streamlit as st
+from sqlalchemy.orm import joinedload
 
 from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import next_patient_code, log_action
@@ -47,7 +48,7 @@ with tab_new:
 
 with tab_list:
     q = st.text_input("Search by name, mobile, or patient ID", key="patient_search")
-    query = db.query(Patient).filter(Patient.tenant_id == tid)
+    query = db.query(Patient).options(joinedload(Patient.referring_doctor)).filter(Patient.tenant_id == tid)
     if q:
         like = f"%{q}%"
         query = query.filter((Patient.name.ilike(like)) | (Patient.mobile.ilike(like)) | (Patient.patient_code.ilike(like)))
@@ -55,6 +56,19 @@ with tab_list:
 
     if not patients:
         st.info("No patients found.")
+
+    # Batch-fetch samples/bills for every listed patient in two queries
+    # total, instead of two queries per patient (was an N+1 pattern).
+    patient_ids = [p.id for p in patients]
+    samples_by_patient, bills_by_patient = {}, {}
+    if patient_ids:
+        for s in db.query(Sample).filter(Sample.tenant_id == tid, Sample.patient_id.in_(patient_ids)) \
+                .order_by(Sample.id.desc()).all():
+            samples_by_patient.setdefault(s.patient_id, []).append(s)
+        for b in db.query(Bill).filter(Bill.tenant_id == tid, Bill.patient_id.in_(patient_ids)) \
+                .order_by(Bill.id.desc()).all():
+            bills_by_patient.setdefault(b.patient_id, []).append(b)
+
     for p in patients:
         with st.expander(f"{p.patient_code} — {p.name} ({p.age}/{p.gender})"):
             col1, col2 = st.columns(2)
@@ -66,8 +80,8 @@ with tab_list:
             if p.notes:
                 st.write(f"**Notes:** {p.notes}")
 
-            samples = db.query(Sample).filter_by(tenant_id=tid, patient_id=p.id).order_by(Sample.id.desc()).all()
-            bills = db.query(Bill).filter_by(tenant_id=tid, patient_id=p.id).order_by(Bill.id.desc()).all()
+            samples = samples_by_patient.get(p.id, [])
+            bills = bills_by_patient.get(p.id, [])
             if samples:
                 st.write("**Samples:**", ", ".join(f"{s.sample_number} ({s.status})" for s in samples))
             if bills:

@@ -1,5 +1,6 @@
 from datetime import datetime
 import streamlit as st
+from sqlalchemy.orm import joinedload
 
 from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import next_receipt_number, log_action
@@ -54,19 +55,27 @@ with tab_new:
 
 with tab_list:
     q = st.text_input("Search by patient name")
-    query = db.query(Bill).filter_by(tenant_id=tid)
+    query = db.query(Bill).options(joinedload(Bill.patient)).filter_by(tenant_id=tid)
     bills = query.order_by(Bill.id.desc()).limit(200).all()
     if q:
         bills = [b for b in bills if q.lower() in b.patient.name.lower()]
 
     if not bills:
         st.info("No bills found.")
+
+    # Batch-fetch bill items for every listed bill in one query instead
+    # of one query per bill (was an N+1 pattern).
+    bill_ids = [b.id for b in bills]
+    items_by_bill = {}
+    if bill_ids:
+        for item in db.query(BillItem).filter(BillItem.tenant_id == tid, BillItem.bill_id.in_(bill_ids)).all():
+            items_by_bill.setdefault(item.bill_id, []).append(item)
+
     for b in bills:
         with st.expander(f"{b.receipt_number} — {b.patient.name} — ₹{b.net_amount:.0f} ({b.status})"):
             st.write(f"**Gross:** ₹{b.gross_amount:.0f} | **Discount:** ₹{b.discount:.0f} | **Net:** ₹{b.net_amount:.0f}")
             st.write(f"**Paid:** ₹{b.paid_amount:.0f} | **Due:** ₹{b.due_amount:.0f}")
-            items = db.query(BillItem).filter_by(tenant_id=tid, bill_id=b.id).all()
-            for item in items:
+            for item in items_by_bill.get(b.id, []):
                 st.write(f"- {item.description}: ₹{item.price:.0f}")
 
             if b.due_amount > 0 and b.status == "Active":

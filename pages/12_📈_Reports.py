@@ -3,8 +3,10 @@ import io
 import streamlit as st
 import pandas as pd
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 from utils.session import get_db, require_login, current_tenant_id
+from utils.helpers import doctor_stats
 from db.models import Patient, Sample, Bill, Expense, TestItem, TestOrder, Doctor
 
 require_login()
@@ -36,13 +38,14 @@ if report_choice == "Patient Report":
                          "Mobile": r.mobile, "Reg. Date": r.registration_date} for r in rows])
 
 elif report_choice == "Sample Collection Report":
-    rows = db.query(Sample).filter(Sample.tenant_id == tid, func.date(Sample.collection_datetime).between(start, end)).all()
+    rows = db.query(Sample).options(joinedload(Sample.patient)) \
+        .filter(Sample.tenant_id == tid, func.date(Sample.collection_datetime).between(start, end)).all()
     df = pd.DataFrame([{"Sample No": r.sample_number, "Patient": r.patient.name, "Type": r.sample_type,
                          "Status": r.status, "Collected": r.collection_datetime} for r in rows])
 
 elif report_choice == "Collection Report":
-    rows = db.query(Bill).filter(Bill.tenant_id == tid, Bill.status == "Active",
-                                  func.date(Bill.created_at).between(start, end)).all()
+    rows = db.query(Bill).options(joinedload(Bill.patient)) \
+        .filter(Bill.tenant_id == tid, Bill.status == "Active", func.date(Bill.created_at).between(start, end)).all()
     df = pd.DataFrame([{"Receipt": r.receipt_number, "Patient": r.patient.name, "Net": r.net_amount,
                          "Paid": r.paid_amount, "Due": r.due_amount, "Mode": r.payment_mode,
                          "Date": r.created_at} for r in rows])
@@ -50,7 +53,8 @@ elif report_choice == "Collection Report":
         st.metric("Total Collection", f"₹{df['Paid'].sum():,.0f}")
 
 elif report_choice == "Pending Payment Report":
-    rows = db.query(Bill).filter(Bill.tenant_id == tid, Bill.status == "Active", Bill.due_amount > 0).all()
+    rows = db.query(Bill).options(joinedload(Bill.patient)) \
+        .filter(Bill.tenant_id == tid, Bill.status == "Active", Bill.due_amount > 0).all()
     df = pd.DataFrame([{"Receipt": r.receipt_number, "Patient": r.patient.name, "Net": r.net_amount,
                          "Due": r.due_amount} for r in rows])
 
@@ -70,12 +74,9 @@ elif report_choice == "Test-wise Report":
 
 elif report_choice == "Doctor-wise Report":
     docs = db.query(Doctor).filter_by(tenant_id=tid).all()
-    data = []
-    for d in docs:
-        pcount = db.query(Patient).filter_by(tenant_id=tid, referring_doctor_id=d.id).count()
-        revenue = db.query(func.sum(Bill.net_amount)).join(Patient).filter(
-            Patient.referring_doctor_id == d.id, Bill.status == "Active", Bill.tenant_id == tid).scalar() or 0
-        data.append({"Doctor": d.name, "Patients": pcount, "Revenue": revenue})
+    stats = doctor_stats(db, tid)
+    data = [{"Doctor": d.name, "Patients": stats.get(d.id, {}).get("patients", 0),
+             "Revenue": stats.get(d.id, {}).get("revenue", 0)} for d in docs]
     df = pd.DataFrame(data)
 
 else:

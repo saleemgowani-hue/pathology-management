@@ -1,9 +1,8 @@
 import streamlit as st
-from sqlalchemy import func
 
 from utils.session import get_db, require_login, current_tenant_id
-from utils.helpers import log_action
-from db.models import Doctor, Pathologist, Patient, Bill
+from utils.helpers import log_action, doctor_stats
+from db.models import Doctor, Pathologist
 
 require_login()
 db = get_db()
@@ -38,14 +37,12 @@ with tab_add_doctor:
 
 with tab_doctors:
     doctors = db.query(Doctor).filter_by(tenant_id=tid).order_by(Doctor.name).all()
+    stats = doctor_stats(db, tid)
     if not doctors:
         st.info("No doctors added yet.")
     for d in doctors:
-        patient_count = db.query(Patient).filter_by(tenant_id=tid, referring_doctor_id=d.id).count()
-        revenue = db.query(func.sum(Bill.net_amount)).join(Patient).filter(
-            Patient.referring_doctor_id == d.id, Bill.status == "Active", Bill.tenant_id == tid
-        ).scalar() or 0
-        st.write(f"**{d.name}** ({d.specialization or '-'}) — {patient_count} patients — ₹{revenue:.0f} revenue")
+        s = stats.get(d.id, {"patients": 0, "revenue": 0})
+        st.write(f"**{d.name}** ({d.specialization or '-'}) — {s['patients']} patients — ₹{s['revenue']:.0f} revenue")
 
 with tab_add_path:
     with st.form("new_path_form", clear_on_submit=True):
