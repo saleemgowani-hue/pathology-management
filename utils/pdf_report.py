@@ -1,4 +1,5 @@
 import io
+import os
 from datetime import datetime
 
 from reportlab.lib.pagesizes import A4
@@ -7,9 +8,26 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 from db.models import Pathologist
 from utils.helpers import get_settings_dict
+
+# reportlab's built-in base-14 fonts (Helvetica etc.) don't include the
+# ₹ (Rupee) glyph -- it renders as a black "tofu" box. DejaVu Sans does,
+# so it's bundled and registered here instead of relying on whatever
+# fonts happen to exist on the deployment host.
+FONT_REGULAR = "Helvetica"
+FONT_BOLD = "Helvetica-Bold"
+_FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts")
+try:
+    pdfmetrics.registerFont(TTFont("DejaVuSans", os.path.join(_FONT_DIR, "DejaVuSans.ttf")))
+    pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", os.path.join(_FONT_DIR, "DejaVuSans-Bold.ttf")))
+    FONT_REGULAR = "DejaVuSans"
+    FONT_BOLD = "DejaVuSans-Bold"
+except Exception:
+    pass  # falls back to Helvetica (no ₹ glyph, but still renders)
 
 
 def generate_report_pdf_bytes(session, tenant_id, sample):
@@ -26,6 +44,9 @@ def generate_report_pdf_bytes(session, tenant_id, sample):
     )
 
     styles = getSampleStyleSheet()
+    styles["Normal"].fontName = FONT_REGULAR
+    styles["Title"].fontName = FONT_BOLD
+    styles["Heading3"].fontName = FONT_BOLD
     title_style = ParagraphStyle("LabTitle", parent=styles["Title"], alignment=TA_CENTER, fontSize=18,
                                   textColor=colors.HexColor("#0b5394"))
     small_center = ParagraphStyle("SmallCenter", parent=styles["Normal"], alignment=TA_CENTER, fontSize=9,
@@ -54,8 +75,9 @@ def generate_report_pdf_bytes(session, tenant_id, sample):
     ]
     pt_table = Table(rows, colWidths=[32 * mm, 60 * mm, 32 * mm, 58 * mm])
     pt_table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
+        ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
+        ("FONTNAME", (2, 0), (2, -1), FONT_BOLD),
         ("FONTSIZE", (0, 0), (-1, -1), 9.5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
@@ -73,17 +95,18 @@ def generate_report_pdf_bytes(session, tenant_id, sample):
             result_rows.append(["-", "-", "-", "-", "-"])
         result_table = Table(result_rows, colWidths=[45 * mm, 30 * mm, 20 * mm, 50 * mm, 25 * mm])
         style_cmds = [
+            ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f0fe")),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dddddd")),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]
         for i, r in enumerate(result_rows[1:], start=1):
             if r[4] in ("High", "Critical"):
-                style_cmds += [("TEXTCOLOR", (4, i), (4, i), colors.red), ("FONTNAME", (4, i), (4, i), "Helvetica-Bold")]
+                style_cmds += [("TEXTCOLOR", (4, i), (4, i), colors.red), ("FONTNAME", (4, i), (4, i), FONT_BOLD)]
             elif r[4] == "Low":
-                style_cmds += [("TEXTCOLOR", (4, i), (4, i), colors.HexColor("#b8860b")), ("FONTNAME", (4, i), (4, i), "Helvetica-Bold")]
+                style_cmds += [("TEXTCOLOR", (4, i), (4, i), colors.HexColor("#b8860b")), ("FONTNAME", (4, i), (4, i), FONT_BOLD)]
         result_table.setStyle(TableStyle(style_cmds))
         story.append(result_table)
         story.append(Spacer(1, 8))
@@ -120,6 +143,8 @@ def generate_bill_pdf_bytes(session, tenant_id, bill):
     lab_email = cfg.get("lab_email", "")
 
     styles = getSampleStyleSheet()
+    styles["Normal"].fontName = FONT_REGULAR
+    styles["Title"].fontName = FONT_BOLD
     title_style = ParagraphStyle("BillTitle", parent=styles["Title"], alignment=TA_CENTER, fontSize=16,
                                   textColor=colors.HexColor("#0b5394"))
     small_center = ParagraphStyle("SmallCenter", parent=styles["Normal"], alignment=TA_CENTER, fontSize=9,
@@ -144,8 +169,9 @@ def generate_bill_pdf_bytes(session, tenant_id, bill):
     ]
     info_table = Table(info_rows, colWidths=[32 * mm, 60 * mm, 32 * mm, 58 * mm])
     info_table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
+        ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
+        ("FONTNAME", (2, 0), (2, -1), FONT_BOLD),
         ("FONTSIZE", (0, 0), (-1, -1), 9.5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
@@ -160,8 +186,9 @@ def generate_bill_pdf_bytes(session, tenant_id, bill):
         item_rows.append([item.description or "-", f"{item.price:,.0f}"])
     item_table = Table(item_rows, colWidths=[130 * mm, 40 * mm])
     item_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f0fe")),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
         ("FONTSIZE", (0, 0), (-1, -1), 9.5),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dddddd")),
@@ -179,10 +206,11 @@ def generate_bill_pdf_bytes(session, tenant_id, bill):
     ]
     totals_table = Table(totals_rows, colWidths=[130 * mm, 40 * mm])
     totals_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
         ("FONTSIZE", (0, 0), (-1, -1), 9.5),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-        ("FONTNAME", (0, 2), (-1, 2), "Helvetica-Bold"),
-        ("FONTNAME", (0, 4), (-1, 4), "Helvetica-Bold"),
+        ("FONTNAME", (0, 2), (-1, 2), FONT_BOLD),
+        ("FONTNAME", (0, 4), (-1, 4), FONT_BOLD),
         ("TEXTCOLOR", (0, 4), (-1, 4), colors.red if bill.due_amount > 0 else colors.HexColor("#2e7d32")),
         ("LINEABOVE", (0, 2), (-1, 2), 0.5, colors.HexColor("#999999")),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
@@ -199,8 +227,9 @@ def generate_bill_pdf_bytes(session, tenant_id, bill):
             pay_rows.append([pay.date.strftime("%d-%b-%Y %H:%M") if pay.date else "-", pay.mode or "-", f"{pay.amount:,.0f}"])
         pay_table = Table(pay_rows, colWidths=[60 * mm, 60 * mm, 50 * mm])
         pay_table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f0fe")),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ALIGN", (2, 0), (2, -1), "RIGHT"),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dddddd")),

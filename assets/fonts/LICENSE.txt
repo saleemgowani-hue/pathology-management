@@ -1,0 +1,11 @@
+DejaVu Sans / DejaVu Sans Bold
+https://dejavu-fonts.github.io/
+
+Bundled here so generated PDFs (utils/pdf_report.py) render the ₹
+(Rupee) sign and other non-Latin-1 characters correctly -- reportlab's
+built-in base-14 fonts (Helvetica etc.) don't include that glyph.
+
+Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved.
+DejaVu changes are in the public domain.
+Licensed under the Bitstream Vera license -- free to use, copy,
+modify, and redistribute. Full text: https://dejavu-fonts.github.io/License.html
