@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 
 from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import next_receipt_number, log_action
+from utils.pdf_report import generate_bill_pdf_bytes
 from db.models import Bill, BillItem, Payment, Patient, TestItem, TestProfile
 
 require_login()
@@ -15,6 +16,17 @@ st.title("🧾 Billing")
 tab_list, tab_new = st.tabs(["Bill List", "New Bill"])
 
 with tab_new:
+    if "last_created_bill_id" in st.session_state:
+        created_bill = db.query(Bill).options(joinedload(Bill.patient)).get(st.session_state["last_created_bill_id"])
+        if created_bill:
+            st.success(f"Bill {created_bill.receipt_number} created for {created_bill.patient.name} — ₹{created_bill.net_amount:,.0f}")
+            st.download_button("⬇️ Download / Print Bill", data=generate_bill_pdf_bytes(db, tid, created_bill),
+                                file_name=f"{created_bill.receipt_number}.pdf", mime="application/pdf", key="dl_new_bill")
+            if st.button("Dismiss", key="dismiss_new_bill"):
+                del st.session_state["last_created_bill_id"]
+                st.rerun()
+            st.divider()
+
     patients = db.query(Patient).filter_by(tenant_id=tid).order_by(Patient.name).all()
     tests = db.query(TestItem).filter_by(tenant_id=tid, active=True).order_by(TestItem.name).all()
     profiles = db.query(TestProfile).filter_by(tenant_id=tid, active=True).all()
@@ -50,7 +62,7 @@ with tab_new:
                 db.add(Payment(tenant_id=tid, bill_id=bill.id, amount=paid_amount, mode=payment_mode, date=datetime.utcnow()))
             db.commit()
             log_action(db, tid, st.session_state["user_id"], "Bill Created", bill.id, receipt_number)
-            st.success(f"Bill {receipt_number} created.")
+            st.session_state["last_created_bill_id"] = bill.id
             st.rerun()
 
 with tab_list:
@@ -77,6 +89,20 @@ with tab_list:
             st.write(f"**Paid:** ₹{b.paid_amount:.0f} | **Due:** ₹{b.due_amount:.0f}")
             for item in items_by_bill.get(b.id, []):
                 st.write(f"- {item.description}: ₹{item.price:.0f}")
+
+            # PDF generation is real work, so only do it when this
+            # specific bill's print is asked for, and cache the bytes
+            # for the rest of the session (same lazy pattern as the
+            # lab report PDFs in Report Verification).
+            pdf_cache_key = f"bill_pdf_bytes_{b.id}"
+            if pdf_cache_key not in st.session_state:
+                if st.button("🖨️ Prepare Print / PDF", key=f"prepbill_{b.id}"):
+                    st.session_state[pdf_cache_key] = generate_bill_pdf_bytes(db, tid, b)
+                    st.rerun()
+            else:
+                st.download_button("⬇️ Download / Print Bill", data=st.session_state[pdf_cache_key],
+                                    file_name=f"{b.receipt_number}.pdf", mime="application/pdf",
+                                    key=f"dlbill_{b.id}")
 
             if b.due_amount > 0 and b.status == "Active":
                 pay_amt = st.number_input("Record Payment", min_value=0.0, max_value=float(b.due_amount), step=10.0, key=f"pay_{b.id}")
