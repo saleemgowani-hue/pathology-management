@@ -5,7 +5,6 @@ from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import next_receipt_number, log_action
 from db.models import Bill, BillItem, Payment, Patient, TestItem, TestProfile
 
-st.set_page_config(page_title="Billing", page_icon="🧾", layout="wide")
 require_login()
 db = get_db()
 tid = current_tenant_id()

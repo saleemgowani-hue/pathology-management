@@ -5,7 +5,6 @@ from utils.session import get_db, require_login, current_tenant_id, current_full
 from utils.helpers import next_sample_number, log_action
 from db.models import Sample, Patient, TestItem, TestOrder, Report
 
-st.set_page_config(page_title="Sample Collection", page_icon="🩸", layout="wide")
 require_login()
 db = get_db()
 tid = current_tenant_id()

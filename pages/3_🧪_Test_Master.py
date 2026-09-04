@@ -4,7 +4,6 @@ from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import log_action
 from db.models import TestItem, TestProfile, TestProfileItem
 
-st.set_page_config(page_title="Test Master", page_icon="🧪", layout="wide")
 require_login()
 db = get_db()
 tid = current_tenant_id()

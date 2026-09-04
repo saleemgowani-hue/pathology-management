@@ -5,7 +5,6 @@ from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import log_action
 from db.models import Sample, TestOrder, TestResult
 
-st.set_page_config(page_title="Result Entry", page_icon="📝", layout="wide")
 require_login()
 db = get_db()
 tid = current_tenant_id()

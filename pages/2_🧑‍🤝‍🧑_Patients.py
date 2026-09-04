@@ -5,7 +5,6 @@ from utils.session import get_db, require_login, current_tenant_id
 from utils.helpers import next_patient_code, log_action
 from db.models import Patient, Doctor, Sample, Bill
 
-st.set_page_config(page_title="Patients", page_icon="🧑‍🤝‍🧑", layout="wide")
 require_login()
 db = get_db()
 tid = current_tenant_id()

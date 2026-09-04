@@ -7,7 +7,6 @@ from sqlalchemy import func
 from utils.session import get_db, require_login, current_tenant_id
 from db.models import Patient, Sample, Bill, Expense, TestItem, TestOrder, Doctor
 
-st.set_page_config(page_title="Reports", page_icon="📈", layout="wide")
 require_login()
 db = get_db()
 tid = current_tenant_id()

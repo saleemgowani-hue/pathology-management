@@ -3,7 +3,6 @@ import streamlit as st
 from utils.session import get_db, require_role, current_tenant_id
 from utils.helpers import get_settings_dict, set_setting
 
-st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
 require_role("admin")
 db = get_db()
 tid = current_tenant_id()

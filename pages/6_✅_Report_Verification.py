@@ -6,7 +6,6 @@ from utils.helpers import log_action
 from utils.pdf_report import generate_report_pdf_bytes
 from db.models import Sample, Report, Pathologist
 
-st.set_page_config(page_title="Report Verification", page_icon="✅", layout="wide")
 require_login()
 db = get_db()
 tid = current_tenant_id()
