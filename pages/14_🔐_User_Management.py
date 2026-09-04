@@ -3,11 +3,13 @@ from sqlalchemy.exc import IntegrityError
 
 from utils.session import get_db, require_role, current_tenant_id, current_user_id
 from utils.auth import hash_password, ROLES
-from db.models import User
+from db.seed_demo import DEMO_LAB_CODE
+from db.models import User, Tenant
 
 require_role("admin")
 db = get_db()
 tid = current_tenant_id()
+is_demo = db.query(Tenant).get(tid).lab_code == DEMO_LAB_CODE
 
 st.title("🔐 User Management")
 
@@ -16,36 +18,43 @@ ADDABLE_ROLES = [r for r in ROLES if r != "admin"]
 tab_list, tab_add = st.tabs(["Staff List", "➕ Add Staff Member"])
 
 with tab_add:
-    st.markdown("#### Add a new staff member")
-    st.caption("Created accounts are active immediately — no separate approval step needed.")
-    with st.form("add_staff_form", clear_on_submit=True):
-        full_name = st.text_input("Full Name *")
-        col1, col2 = st.columns(2)
-        username = col1.text_input("Username *")
-        role = col2.selectbox("Role *", ADDABLE_ROLES, format_func=lambda r: r.capitalize())
-        col3, col4 = st.columns(2)
-        password = col3.text_input("Password *", type="password")
-        confirm = col4.text_input("Confirm Password *", type="password")
-        mobile = st.text_input("Mobile Number")
-        submitted = st.form_submit_button("Add Staff Member", type="primary")
-        if submitted:
-            if not all([full_name, username, password]):
-                st.error("Please fill in all required fields marked *.")
-            elif len(password) < 6:
-                st.error("Password must be at least 6 characters.")
-            elif password != confirm:
-                st.error("Password and confirmation do not match.")
-            elif db.query(User).filter_by(tenant_id=tid, username=username.strip()).first():
-                st.error("That username is already taken at this lab. Please choose another.")
-            else:
-                db.add(User(
-                    tenant_id=tid, username=username.strip(), full_name=full_name.strip(),
-                    role=role, mobile=mobile.strip(), active=True,
-                    password_hash=hash_password(password),
-                ))
-                db.commit()
-                st.success(f"'{full_name}' added as {role.capitalize()} and can log in now.")
-                st.rerun()
+    if is_demo:
+        st.info(
+            "Adding staff accounts is disabled in the public demo lab — anyone can log in "
+            "here with the credentials shown on the login page, so allowing new logins would "
+            "let them plant a permanent account. Register your own lab for full access."
+        )
+    else:
+        st.markdown("#### Add a new staff member")
+        st.caption("Created accounts are active immediately — no separate approval step needed.")
+        with st.form("add_staff_form", clear_on_submit=True):
+            full_name = st.text_input("Full Name *")
+            col1, col2 = st.columns(2)
+            username = col1.text_input("Username *")
+            role = col2.selectbox("Role *", ADDABLE_ROLES, format_func=lambda r: r.capitalize())
+            col3, col4 = st.columns(2)
+            password = col3.text_input("Password *", type="password")
+            confirm = col4.text_input("Confirm Password *", type="password")
+            mobile = st.text_input("Mobile Number")
+            submitted = st.form_submit_button("Add Staff Member", type="primary")
+            if submitted:
+                if not all([full_name, username, password]):
+                    st.error("Please fill in all required fields marked *.")
+                elif len(password) < 6:
+                    st.error("Password must be at least 6 characters.")
+                elif password != confirm:
+                    st.error("Password and confirmation do not match.")
+                elif db.query(User).filter_by(tenant_id=tid, username=username.strip()).first():
+                    st.error("That username is already taken at this lab. Please choose another.")
+                else:
+                    db.add(User(
+                        tenant_id=tid, username=username.strip(), full_name=full_name.strip(),
+                        role=role, mobile=mobile.strip(), active=True,
+                        password_hash=hash_password(password),
+                    ))
+                    db.commit()
+                    st.success(f"'{full_name}' added as {role.capitalize()} and can log in now.")
+                    st.rerun()
 
 with tab_list:
     users = db.query(User).filter_by(tenant_id=tid).order_by(User.id).all()

@@ -2,14 +2,34 @@ from datetime import date, timedelta
 import streamlit as st
 from sqlalchemy import func
 
-from utils.session import get_db, require_login, current_tenant_id
-from db.models import Patient, Sample, Report, Bill, Doctor, TestItem, Staff, TestOrder
+from utils.session import get_db, require_login, current_tenant_id, current_role
+from utils.helpers import add_demo_patients
+from db.seed_demo import reset_demo_data, DEMO_LAB_CODE
+from db.models import Patient, Sample, Report, Bill, Doctor, TestItem, Staff, TestOrder, Tenant
 
 require_login()
 db = get_db()
 tid = current_tenant_id()
 
 st.title("📊 Dashboard")
+
+_tenant = db.query(Tenant).get(tid)
+if current_role() == "admin" and _tenant.lab_code == DEMO_LAB_CODE:
+    with st.container(border=True):
+        st.markdown("**🧪 Demo Data Controls**")
+        st.caption(
+            "This is the public demo lab — anything entered here resets automatically "
+            "within 60 minutes. Use these to add or clear sample data on demand."
+        )
+        col_add, col_remove = st.columns(2)
+        if col_add.button("➕ Add Demo Data", use_container_width=True):
+            add_demo_patients(db, tid, count=20)
+            st.success("20 demo patients added.")
+            st.rerun()
+        if col_remove.button("🗑️ Remove Demo Data", use_container_width=True):
+            reset_demo_data(db, tid)
+            st.success("Demo data cleared and reset to the 20-patient baseline.")
+            st.rerun()
 
 today = date.today()
 

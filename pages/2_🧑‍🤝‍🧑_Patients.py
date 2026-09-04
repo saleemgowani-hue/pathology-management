@@ -1,8 +1,8 @@
 from datetime import date
 import streamlit as st
 
-from utils.session import get_db, require_login, current_tenant_id, current_role
-from utils.helpers import next_patient_code, log_action, add_demo_patients
+from utils.session import get_db, require_login, current_tenant_id
+from utils.helpers import next_patient_code, log_action
 from db.models import Patient, Doctor, Sample, Bill
 
 require_login()
@@ -46,14 +46,6 @@ with tab_new:
                 st.rerun()
 
 with tab_list:
-    if current_role() == "admin":
-        with st.expander("🧪 Load demo data"):
-            st.caption("Adds 20 fake patients so you can try out Sample Collection, Billing, and Reports without typing in real data.")
-            if st.button("Add 20 Demo Patients"):
-                add_demo_patients(db, tid, count=20)
-                st.success("20 demo patients added.")
-                st.rerun()
-
     q = st.text_input("Search by name, mobile, or patient ID", key="patient_search")
     query = db.query(Patient).filter(Patient.tenant_id == tid)
     if q:

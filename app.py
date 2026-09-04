@@ -1,9 +1,13 @@
 import streamlit as st
 
-st.set_page_config(page_title="PathoLab Pro Cloud", page_icon="🩺", layout="wide")
+_already_logged_in = "user_id" in st.session_state and "tenant_id" in st.session_state
+st.set_page_config(page_title="PathoLab Pro Cloud", page_icon="🩺",
+                    layout="wide" if _already_logged_in else "centered")
 
 from db.init_db import init_db  # noqa: E402
-from db.seed_demo import seed_demo_account, DEMO_LAB_CODE, DEMO_USERNAME, DEMO_PASSWORD  # noqa: E402
+from db.seed_demo import (  # noqa: E402
+    seed_demo_account, maybe_auto_reset_demo, DEMO_LAB_CODE, DEMO_USERNAME, DEMO_PASSWORD,
+)
 from utils.session import get_db, is_logged_in, login_session, logout_session, current_full_name, current_role, current_tenant_id  # noqa: E402
 from utils.auth import authenticate, create_admin_user  # noqa: E402
 from utils.license_manager import register_tenant, tenant_status, renew_tenant  # noqa: E402
@@ -179,6 +183,8 @@ if not is_logged_in():
 else:
     db = get_db()
     tenant = db.query(Tenant).get(current_tenant_id())
+    if tenant.lab_code == DEMO_LAB_CODE:
+        maybe_auto_reset_demo(db)
     state = tenant_status(tenant)
     db.commit()
 
