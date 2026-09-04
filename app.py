@@ -5,7 +5,7 @@ st.set_page_config(page_title="PathoLab Pro Cloud", page_icon="🩺", layout="wi
 from db.init_db import init_db  # noqa: E402
 from db.seed_demo import seed_demo_account, DEMO_LAB_CODE, DEMO_USERNAME, DEMO_PASSWORD  # noqa: E402
 from utils.session import get_db, is_logged_in, login_session, logout_session, current_full_name, current_role, current_tenant_id  # noqa: E402
-from utils.auth import authenticate, create_admin_user, join_existing_lab, STAFF_ROLES  # noqa: E402
+from utils.auth import authenticate, create_admin_user  # noqa: E402
 from utils.license_manager import register_tenant, tenant_status, renew_tenant  # noqa: E402
 from db.models import Tenant  # noqa: E402
 
@@ -72,6 +72,38 @@ st.markdown(
         padding: 1px 6px;
         border-radius: 4px;
     }
+
+    /* --- Visible scrollbars (sidebar + main content) --- */
+    [data-testid="stSidebarContent"], [data-testid="stMain"], section.main {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(79, 195, 247, 0.6) transparent;
+    }
+    [data-testid="stSidebarContent"]::-webkit-scrollbar,
+    [data-testid="stMain"]::-webkit-scrollbar,
+    section.main::-webkit-scrollbar {
+        width: 10px;
+    }
+    [data-testid="stSidebarContent"]::-webkit-scrollbar-track,
+    [data-testid="stMain"]::-webkit-scrollbar-track,
+    section.main::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    [data-testid="stSidebarContent"]::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.35);
+        border-radius: 6px;
+    }
+    [data-testid="stMain"]::-webkit-scrollbar-thumb,
+    section.main::-webkit-scrollbar-thumb {
+        background: rgba(11, 83, 148, 0.45);
+        border-radius: 6px;
+    }
+    [data-testid="stSidebarContent"]::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.55);
+    }
+    [data-testid="stMain"]::-webkit-scrollbar-thumb:hover,
+    section.main::-webkit-scrollbar-thumb:hover {
+        background: rgba(11, 83, 148, 0.7);
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -82,7 +114,7 @@ def home_page():
     st.markdown("## 🩺 PathoLab Pro — Cloud")
     st.caption("Multi-tenant pathology lab management platform")
 
-    tab_login, tab_register, tab_join = st.tabs(["🔑 Log In", "🏥 Register New Lab", "👤 Join Existing Lab"])
+    tab_login, tab_register = st.tabs(["🔑 Log In", "🏥 Register New Lab"])
 
     with tab_login:
         st.markdown("#### Log in to your lab")
@@ -139,38 +171,6 @@ def home_page():
                             "write this down, you'll need it (with your username and password) to log in."
                         )
                         st.balloons()
-
-    with tab_join:
-        st.markdown("#### Join a lab that's already registered")
-        st.caption("Your account will need approval from your lab's administrator before you can log in.")
-        with st.form("join_form"):
-            join_lab_code = st.text_input("Lab Code *")
-            join_full_name = st.text_input("Your Full Name *")
-            join_username = st.text_input("Choose a Username *")
-            join_password = st.text_input("Choose a Password *", type="password")
-            join_confirm = st.text_input("Confirm Password *", type="password")
-            join_mobile = st.text_input("Mobile Number")
-            join_role = st.selectbox("Your Role *", STAFF_ROLES, format_func=lambda r: r.capitalize())
-            submitted = st.form_submit_button("Join Lab", type="primary")
-            if submitted:
-                if not all([join_lab_code, join_full_name, join_username, join_password]):
-                    st.error("Please fill in all required fields marked *.")
-                elif len(join_password) < 6:
-                    st.error("Password must be at least 6 characters.")
-                elif join_password != join_confirm:
-                    st.error("Password and confirmation do not match.")
-                else:
-                    db = get_db()
-                    tenant = db.query(Tenant).filter_by(lab_code=join_lab_code.strip().upper()).first()
-                    if not tenant:
-                        st.error("Lab Code not found. Double-check it with your lab administrator.")
-                    else:
-                        user, err = join_existing_lab(db, tenant.id, join_full_name, join_username,
-                                                       join_password, join_role, join_mobile)
-                        if err:
-                            st.error(err)
-                        else:
-                            st.success("Account created! Your administrator needs to approve it before you can log in.")
 
 
 if not is_logged_in():
